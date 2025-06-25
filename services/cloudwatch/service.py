@@ -23,7 +23,17 @@ class CloudWatchService():
         }
 
         all_logs = []
+        print("Processing logs ", end="", flush=True)
+        loop_count = 0
+        process_count = 0
         while True:
+            loop_count += 1
+            process_count += 1
+            if process_count < 50:
+                print(".", end="", flush=True)
+            else:
+                process_count = 1
+                print("\nProcessing logs .", end="", flush=True)
             response = self.cloudwatch.filter_log_events(**kwargs)
             all_logs.extend(response.get("events", []))
 
@@ -33,12 +43,13 @@ class CloudWatchService():
             kwargs["nextToken"] = next_token
         
         error_logs = [event for event in all_logs if not (":LOG:" in event["message"] or ":FATAL:" in event["message"])]
-
+        print(f"\n========================================")
+        print(f"Processed {loop_count} logs")
+        print(f"========================================")
         return error_logs
 
     def group_logs_by_timestamp(self, logs, round_to='second'):
         grouped_logs = {}
-
         for log in logs:
             timestamp = int(log["timestamp"])  # CloudWatch timestamps are in milliseconds
             dt = datetime.fromtimestamp(timestamp / 1000, tz=timezone.utc)
@@ -64,8 +75,6 @@ class CloudWatchService():
         with open(local_path, "w") as f:
             json.dump( logs, f, indent=4)
 
-        print(f"saved logs on {local_path}")
-
         return
 
     def process_rds_logs(self, start_time, end_time):
@@ -76,12 +85,12 @@ class CloudWatchService():
         local_path = self.LOCAL_LOG_PATH + generate_filename("json")
         self.save_logs_to_local(grouped_logs, local_path)
 
-        return local_path
+        return local_path, len(grouped_logs)
     
     def process_daily_rds_logs(self):
         start_time, end_time = one_day_range()
-        local_path = self.process_rds_logs(start_time, end_time)
+        local_path, total_error = self.process_rds_logs(start_time, end_time)
 
-        return local_path
+        return local_path, total_error
         
 
